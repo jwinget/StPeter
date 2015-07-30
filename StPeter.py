@@ -270,7 +270,7 @@ def extractPeaks(rdf, scans):
 def calcIons(peptide, mods):
 	''' Calculate ion series for a given modified peptide '''
 	theoretical_ions = []
-	# Convert peptide to stripped form
+	# Convert peptide to stripped form, handling N-terminal modifications
 	if re.match(r'^n', peptide): # N-term mods are special
 		parts = peptide.split('[')[1].split(']')
 		val = parts[0]
@@ -284,7 +284,7 @@ def calcIons(peptide, mods):
 		else:
 			print ("MAJOR ERROR: Could not decipher N-terminal mod. B-ion series will be corrupted")
 
-	stripped = re.sub(r'[a-z]*\[[0-9]*\]','',peptide)
+	stripped = re.sub(r'[a-z]*\[[0-9]*\]','',peptide) # Strip out other mod info in string
 	if not mods:
 		aa_masses = [md[aa] for aa in stripped] # pull masses from global dict
 	else: # Handle mods
@@ -313,6 +313,92 @@ def calcIons(peptide, mods):
 					ion_mass = (sum(y_masses[0:i+1]) + md['H2O'] + md['proton']) / scharge
 					theoretical_ions.append(ion_mass)
 	return list(sorted(theoretical_ions)) # list
+
+def extractIntensities(d, raw_files, scans, tol):
+	''' Extract raw data, peak match, and record intensities in one shot '''
+	print('Extracting intensity data')
+	# Remap peptide:spectrum information as spectrum:peptide
+	# Also need peptide:protein
+	spec2pep = {}
+	pep2prot = {}
+	for protein in d.keys():
+		for peptide in d[protein]['peptides'].keys():
+			pep2prot[peptide] = protein
+			spectra = d[protein]['peptides'][peptide]['spectra']
+			for spectrum in spectra:
+				parts = spectrum.split('.')
+				short = parts[0]
+				scan_num = int(parts[1])
+				try:
+					spec2pep[short][scan_num] = peptide
+				except:
+					spec2pep[short] = {}
+					spec2pep[short][scan_num] = peptide
+
+	gi = 0 # Global matched intensity
+	for short in spec2pep.keys():
+		count = 0
+		print('\nExtracting from '+short)
+		rf = raw_files[short]
+		needed_scans = scans[short]
+		msrun = pymzml.run.Reader(rf)
+		for s in msrun:
+			if s['id'] in needed_scans:
+				# Info from the scan
+				peak_masses = [mz for mz, i in s.peaks]
+				peak_intensities = [i for mz, i in s.peaks]
+
+				# Now map back to the peptide + mods
+				thispep = spec2pep[short][s['id']]
+				prot = pep2prot[thispep]
+				pepmods = d[prot]['peptides'][thispep]['modifications']
+
+				# And generate the ions to match against
+				theoretical_ions = calcIons(thispep, pepmods)
+
+				# Now match theoretical to observed ions, get intensities and write to struct
+				intensities = []
+				for ti in theoretical_ions:
+					pos = bisect.bisect(peak_masses, ti)
+					matched_intensities = []
+					left_boundary = 0
+					right_boundary = 0
+					if pos == 0:
+						left_boundary = 1
+					elif pos == len(peak_masses):
+						right_boundary = 1
+					i = 1
+					j = 0
+					while not left_boundary:
+						if abs(ti - peak_masses[pos - i]) <= tol:
+							matched_intensities.append(peak_intensities[pos-i])
+							if pos - i == 0:
+								left_boundary = 1
+							i += 1
+						else:
+							left_boundary = 1
+					while not right_boundary:
+						if abs(ti - peak_masses[pos + j]) <= tol:
+							matched_intensities.append(peak_intensities[pos+j])
+							j += 1
+							if pos + j == len(peak_masses):
+								right_boundary = 1
+						else:
+							right_boundary = 1
+					if matched_intensities:
+						top_intensity = list(sorted(matched_intensities))[-1]
+						if top_intensity not in intensities: # Don't double-count peaks inside tolerance
+							intensities.append(top_intensity)
+				try:
+					d[prot]['peptides'][thispep]['intensity'] += sum(intensities)
+				except:
+					d[prot]['peptides'][thispep]['intensity'] = sum(intensities)
+				gi += sum(intensities)
+				count += 1
+				pct_complete = round(100*(float(count) / len(needed_scans)), 1)
+				sys.stdout.write('\r'+str(pct_complete)+'% complete')
+
+	return d, gi
 
 def compileIntensities(d, peak_info, tol):
 	''' Here we go, time to merge the protein data structure with the raw peak information '''
@@ -372,7 +458,7 @@ def compileIntensities(d, peak_info, tol):
 
 def calcNSI(d, gi):
 	''' Produce the normalized spectral index '''
-	print('Calculating Normalized Spectral Indices')
+	print('\nCalculating Normalized Spectral Indices')
 	for protein in d.keys():
 		length = d[protein]['length']
 		pep_intensities = []
@@ -422,7 +508,8 @@ if __name__ == '__main__':
 	d = getSpectra(d, pepxml)
 	raw_files = getRawData(pepxml)
 	scans = compileScanEvents(d, raw_files)
-	peak_info = extractPeaks(raw_files, scans)
-	d, gi = compileIntensities(d, peak_info, tol)
+	#peak_info = extractPeaks(raw_files, scans)
+	#d, gi = compileIntensities(d, peak_info, tol)
+	d, gi = extractIntensities(d, raw_files, scans, tol)
 	d = calcNSI(d, gi)
 	outputNSI(protxml, d)
