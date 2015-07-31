@@ -125,6 +125,38 @@ def getProts(protxml, pc):
 	print('Parsed '+str(len(d.keys()))+' proteins')
 	return d
 
+def getDatabase(protxml):
+	''' Parse the original search database from ProtXML '''
+	dbs = []
+	def parseDB(elem):
+		thisdb = elem.get('reference_database')
+		dbs.append(thisdb)
+	mytag = '{'+NS['ProtXML']+'}protein_summary_header'
+	context = etree.iterparse(protxml, tag=mytag)
+	fast_iter(context, parseDB)
+	db = dbs[0]
+	return db
+
+def calcLengths(db, nolengths):
+	''' Parse a fasta file to generate protein lengths for proteins that need them'''
+	lengths = {}
+	return lengths
+
+def checkLengths(d, protxml):
+	''' Sometimes lengths 0 get written to ProtXML. Fun. '''
+	nolength = []
+	for protein in d.keys():
+		if not d[protein]['length']:
+			nolength.append(protein)
+			del d[protein]
+	if nolength: # We got some fixin' to do
+		print("Could not find lengths for:")
+		print(','.join(nolength))
+		# Implement fix using database here
+		#db = getDatabase(protxml)
+		#print(db)
+	return d
+
 def getPepXML(protxml):
 	''' Parse the source pepXML out of a protXML file '''
 
@@ -148,7 +180,7 @@ def getSpectra(d, pepxml):
 		all_peps += info['peptides'].keys()
 	print('Parsing PSMs from pepXML')
 
-	matched_psms = {}
+	psms = {}
 	counter = [0]
 	def parsePSMs(elem):
 		spectrum = elem.get('spectrum')
@@ -163,26 +195,31 @@ def getSpectra(d, pepxml):
 			# Some search engines write C[160] to PepXML, some don't. Isn't that fun.
 			seq = re.sub(r'C\[160\]','C',seq) # Cys is my least favorite amino acid
 
-		if seq in all_peps: # Keep it
-			counter[0] += 1
-			if seq not in matched_psms.keys():
-				matched_psms[seq] = {}
+		# For speed, we first keep all PSMs and parse them into the struct later on
+		counter[0] += 1
+		try:
+			psms[seq]['spectra'].append(spectrum)
+		except: # Maybe spectral list doesn't exist
 			try:
-				matched_psms[seq]['spectra'].append(spectrum)
-			except:
-				matched_psms[seq]['spectra'] = [spectrum]
-			if mod_info:
-				mods = elem.xpath('PepXML:search_result/PepXML:search_hit/PepXML:modification_info/PepXML:mod_aminoacid_mass', namespaces=NS)
-				modlist = []
-				for m in mods:
-					position = int(m.get('position'))
-					mass = float(m.get('mass'))
-					mt = (position, mass)
-					modlist.append(mt)
-				matched_psms[seq]['modifications'] = modlist
-			else: # No mods, just insert an empty list
-				matched_psms[seq]['modifications'] = []
-			sys.stdout.write('\rParsed '+str(counter[0])+' PSMs')
+				psms[seq]['spectra'] = [spectrum]
+			except: # Maybe this is a new sequence
+				try:
+					psms[seq] = {}
+					psms[seq]['spectra'] = [spectrum]
+				except:
+					print('Error processing '+spectrum)
+		if mod_info:
+			mods = elem.xpath('PepXML:search_result/PepXML:search_hit/PepXML:modification_info/PepXML:mod_aminoacid_mass', namespaces=NS)
+			modlist = []
+			for m in mods:
+				position = int(m.get('position'))
+				mass = float(m.get('mass'))
+				mt = (position, mass)
+				modlist.append(mt)
+			psms[seq]['modifications'] = modlist
+		else: # No mods, just insert an empty list
+			psms[seq]['modifications'] = []
+		sys.stdout.write('\rParsed '+str(counter[0])+' total PSMs')
 
 
 	mytag = '{'+NS['PepXML']+'}spectrum_query'
@@ -190,11 +227,12 @@ def getSpectra(d, pepxml):
 	fast_iter(context, parsePSMs)
 
 	# Merge the matched PSMs with the main data struct
+	print('\nMerging significant PSMs with protein data')
 	for protein in d.keys():
 		for peptide in d[protein]['peptides'].keys():
 			try:
-				spectra = matched_psms[peptide]['spectra']
-				mods = matched_psms[peptide]['modifications']
+				spectra = psms[peptide]['spectra']
+				mods = psms[peptide]['modifications']
 				try:
 					d[protein]['peptides'][peptide]['spectra'] += spectra
 				except:
@@ -227,6 +265,7 @@ def getRawData(pepxml):
 	context = etree.iterparse(pepxml, tag=mytag)
 	fast_iter(context, parseRawData)
 
+	print('Found '+str(len(list(set(found_files))))+' raw files')
 	return raw_files
 
 def compileScanEvents(d, rdf):
@@ -466,8 +505,12 @@ def calcNSI(d, gi):
 			pep_intensities.append(d[protein]['peptides'][peptide]['intensity'])
 		prot_intensity = sum(pep_intensities)
 
-		nsi = log((prot_intensity / gi / length), 2)
-		d[protein]['nsi'] = nsi
+		try:
+			nsi = log((prot_intensity / gi / length), 2)
+			d[protein]['nsi'] = nsi
+		except:
+			print("Error calculating SIn for "+protein)
+			print(prot_intensity, gi, length)
 	
 	return d
 
@@ -504,12 +547,11 @@ if __name__ == '__main__':
 
 	pc = calcFDR(protxml, fdr)
 	d = getProts(protxml, pc)
+	d = checkLengths(d, protxml)
 	pepxml = getPepXML(protxml)
 	d = getSpectra(d, pepxml)
 	raw_files = getRawData(pepxml)
 	scans = compileScanEvents(d, raw_files)
-	#peak_info = extractPeaks(raw_files, scans)
-	#d, gi = compileIntensities(d, peak_info, tol)
 	d, gi = extractIntensities(d, raw_files, scans, tol)
 	d = calcNSI(d, gi)
 	outputNSI(protxml, d)
