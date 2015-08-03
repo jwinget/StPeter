@@ -253,19 +253,21 @@ def getRawData(pepxml):
 		base_name = elem.get('base_name')
 		data_type = elem.get('raw_data')
 		if data_type != '.mzML':
-			print('ERROR: Only mzML is currently supported')
-			sys.exit()
-		raw_file = base_name + data_type
-		raw_short = base_name.split('/')[-1]
-		if raw_file not in found_files:
-			raw_files[raw_short] = raw_file
-			found_files.append(raw_file)
+			if data_type == '':
+				data_type = 'None'
+			print('ERROR: Only mzML is currently supported, got '+data_type+' for '+base_name)
+		else:
+			raw_file = base_name + data_type
+			raw_short = base_name.split('/')[-1]
+			if raw_file not in found_files:
+				raw_files[raw_short] = raw_file
+				found_files.append(raw_file)
 
 	mytag = '{'+NS['PepXML']+'}msms_run_summary'
 	context = etree.iterparse(pepxml, tag=mytag)
 	fast_iter(context, parseRawData)
 
-	print('Found '+str(len(list(set(found_files))))+' raw files')
+	print('Found '+str(len(raw_files.keys()))+' raw files')
 	return raw_files
 
 def compileScanEvents(d, rdf):
