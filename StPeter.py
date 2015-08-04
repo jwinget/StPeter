@@ -112,7 +112,7 @@ def getProts(protxml, pc):
 						seq = pep.xpath('ProtXML:indistinguishable_peptide/ProtXML:modification_info/@modified_peptide', namespaces=NS)[0]
 					except: # Unmodified version
 						seq = pep.get('peptide_sequence')
-					seq = re.sub(r'C\[160\]','C',seq) # Cys causes problems later
+					seq = re.sub(r'C\[[0-9]{3}\]','C',seq) # Cys causes problems later
 					d[name]['peptides'][seq] = {}
 
 			if len(d[name]['peptides'].keys()) == 0: # Protein has no nondegenerate evidence
@@ -191,9 +191,9 @@ def getSpectra(d, pepxml):
 		except: # Use unmodified sequence
 			seq = elem.xpath('PepXML:search_result/PepXML:search_hit/@peptide', namespaces=NS)[0]
 
-		if 'C[160]' in seq:
+		if 'C[' in seq:
 			# Some search engines write C[160] to PepXML, some don't. Isn't that fun.
-			seq = re.sub(r'C\[160\]','C',seq) # Cys is my least favorite amino acid
+			seq = re.sub(r'C\[[0-9]{3}\]','C',seq) # Cys is my least favorite amino acid
 
 		# For speed, we first keep all PSMs and parse them into the struct later on
 		counter[0] += 1
