@@ -10,9 +10,12 @@ import re
 import sys
 import pymzml
 import bisect
+import time
 from lxml import etree
 from numpy import interp
 from math import log
+
+start_time = time.time()
 
 #-- Global dicts to hold some frequently used values --#
 # Aminoacid_masses
@@ -560,3 +563,4 @@ if __name__ == '__main__':
 	d, gi = extractIntensities(d, raw_files, scans, tol)
 	d = calcNSI(d, gi)
 	outputNSI(protxml, d)
+	print("--- %s seconds --" % (time.time() - start_time))
