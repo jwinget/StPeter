@@ -392,13 +392,17 @@ def extractIntensities(d, raw_files, scans, tol):
 		needed_scans = scans[short]
 		msrun = pymzml.run.Reader(rf)
 		for s in msrun:
-			if s['id'] in needed_scans:
+			#debug
+			root = s.xmlTree.next()
+			specid = int(root.get('index')) + 1
+			#specid = int(s.xmlTree.root().get('index') + 1) # Sciex mzML only has index, not scan number
+			if specid in needed_scans:
 				# Info from the scan
 				peak_masses = [mz for mz, i in s.peaks]
 				peak_intensities = [i for mz, i in s.peaks]
 
 				# Now map back to the peptide + mods
-				thispep = spec2pep[short][s['id']]
+				thispep = spec2pep[short][specid]
 				prot = pep2prot[thispep]
 				pepmods = d[prot]['peptides'][thispep]['modifications']
 
