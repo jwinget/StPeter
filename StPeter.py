@@ -504,7 +504,10 @@ def calcNSI(d, gi):
 		length = d[protein]['length']
 		pep_intensities = []
 		for peptide in d[protein]['peptides'].keys():
-			pep_intensities.append(d[protein]['peptides'][peptide]['intensity'])
+			try:
+				pep_intensities.append(d[protein]['peptides'][peptide]['intensity'])
+			except:
+				print('Did not extract intensity for '+peptide+' in '+protein)
 		prot_intensity = sum(pep_intensities)
 
 		try:
