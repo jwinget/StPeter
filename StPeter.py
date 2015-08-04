@@ -178,9 +178,9 @@ def getPepXML(protxml):
 def getSpectra(d, pepxml):
 	''' Get scan events for the peptides of interest '''
 	# Generate flat list of peptide sequences
-	all_peps = []
-	for protein, info in d.iteritems():
-		all_peps += info['peptides'].keys()
+	#all_peps = []
+	#for protein, info in d.iteritems():
+	#	all_peps += info['peptides'].keys()
 	print('Parsing PSMs from pepXML')
 
 	psms = {}
@@ -283,8 +283,8 @@ def compileScanEvents(d, rdf):
 		for peptide in d[protein]['peptides'].keys():
 			for spectrum in d[protein]['peptides'][peptide]['spectra']:
 				parts = spectrum.split('.')
-				short = parts[0]
-				scan_num = int(parts[1])
+				short = '.'.join(parts[0:-3])
+				scan_num = int(parts[-3])
 				scans[short].append(scan_num)
 
 	for rdf_short, scanlist in scans.iteritems():
@@ -374,8 +374,10 @@ def extractIntensities(d, raw_files, scans, tol):
 			spectra = d[protein]['peptides'][peptide]['spectra']
 			for spectrum in spectra:
 				parts = spectrum.split('.')
-				short = parts[0]
-				scan_num = int(parts[1])
+				short = '.'.join(parts[0:-3])
+				scan_num = int(parts[-3])
+				#short = parts[0]
+				#scan_num = int(parts[1])
 				try:
 					spec2pep[short][scan_num] = peptide
 				except:
