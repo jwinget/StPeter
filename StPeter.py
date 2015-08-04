@@ -337,7 +337,10 @@ def calcIons(peptide, mods):
 		aa_masses = []
 		for i in range(0,len(stripped)):
 			if i+1 not in mod_positions:
-				aa_masses.append(md[stripped[i]])
+				try:
+					aa_masses.append(md[stripped[i]])
+				except:
+					print('Error assigning mass to '+peptide+' at position '+str(i))
 			else:
 				aa_masses.append(mod_masses[mod_positions.index(i+1)])
 
@@ -563,4 +566,4 @@ if __name__ == '__main__':
 	d, gi = extractIntensities(d, raw_files, scans, tol)
 	d = calcNSI(d, gi)
 	outputNSI(protxml, d)
-	print("--- %s seconds --" % (time.time() - start_time))
+	print("--- %s seconds ---" % (time.time() - start_time))
