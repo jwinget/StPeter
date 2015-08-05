@@ -392,10 +392,10 @@ def extractIntensities(d, raw_files, scans, tol):
 		needed_scans = scans[short]
 		msrun = pymzml.run.Reader(rf)
 		for s in msrun:
-			#debug
+			# Sciex mzMLs don't encode scans properly
+			# So we use index+1 since indices start at 0
 			root = s.xmlTree.next()
 			specid = int(root.get('index')) + 1
-			#specid = int(s.xmlTree.root().get('index') + 1) # Sciex mzML only has index, not scan number
 			if specid in needed_scans:
 				# Info from the scan
 				peak_masses = [mz for mz, i in s.peaks]
